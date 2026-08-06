@@ -1,0 +1,58 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+name: Devin Remediation
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  remediate:
+    if: github.event.label.name == 'devin-remediation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out automation code
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: devin-remediation-demo
+          sparse-checkout-cone-mode: false
+
+      - name: Build automation image
+        run: docker build -t devin-remediation-demo devin-remediation-demo
+
+      - name: Launch Devin remediation session
+        env:
+          DEVIN_API_KEY: ${{ secrets.DEVIN_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          POLL_TIMEOUT_SECONDS: ${{ vars.POLL_TIMEOUT_SECONDS }}
+        run: |
+          docker run --rm \
+            -e DEVIN_API_KEY \
+            -e GITHUB_TOKEN \
+            -e GITHUB_EVENT_PATH=/event.json \
+            -e GITHUB_SERVER_URL \
+            -e GITHUB_REPOSITORY \
+            -e GITHUB_RUN_ID \
+            -e POLL_TIMEOUT_SECONDS \
+            -v "${{ github.event_path }}:/event.json:ro" \
+            devin-remediation-demo
+        # Optional repo variable POLL_TIMEOUT_SECONDS: seconds to poll the session
+        # for a pull-request link before the job exits.

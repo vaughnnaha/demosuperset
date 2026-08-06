@@ -1,0 +1,15 @@
+{
+  "action": "labeled",
+  "label": { "name": "devin-remediation" },
+  "issue": {
+    "number": 3,
+    "title": "test(native-filters): cover defaultToFirstItem clear and required-state behavior",
+    "body": "## Problem\nThe defaultToFirstItem clear fix has no regression coverage.",
+    "html_url": "https://github.com/vaughnnaha/demosuperset/issues/3"
+  },
+  "repository": {
+    "full_name": "vaughnnaha/demosuperset",
+    "html_url": "https://github.com/vaughnnaha/demosuperset",
+    "default_branch": "master"
+  }
+}
