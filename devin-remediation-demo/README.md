@@ -36,6 +36,8 @@ NIST SP 800-53 Rev. 5 mapping.
    permission on the repository. A refusal comments on the issue and exits 1.
 4. The script builds a remediation prompt with the issue body fenced as
    untrusted data and secret-shaped strings redacted, then calls the Devin API.
+   The prompt's directives are issue-agnostic — scope, acceptance criteria, and
+   validation commands come from the issue itself — so any labeled issue works.
 5. The script comments the session link and workflow-run link on the issue.
 6. Devin works the issue autonomously and opens a pull request.
 7. Every authorization decision and session lifecycle transition is appended to
@@ -86,6 +88,7 @@ Optional repository variables:
 | --- | --- | --- |
 | `ACTOR_ALLOWLIST` | unset | Comma-separated logins permitted to trigger remediation. Unset means "any collaborator with write or admin". |
 | `POLL_TIMEOUT_SECONDS` | `0` | When greater than zero, poll the session for that many seconds, comment the pull-request URL, and record session end time and duration in the audit log. Set it (e.g. `1800`) for session-duration and outcome metrics in the report. |
+| `EXTRA_PROMPT_DIRECTIVES` | unset | Extra bullet directives appended to every remediation prompt, for repository-wide rules the issues do not restate. |
 
 ## Required repository settings
 
