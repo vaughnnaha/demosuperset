@@ -49,7 +49,7 @@ def convert_filter_scopes(  # noqa: C901
                 "immune": current_filter_immune,
             }
         else:
-            logging.info("slice [%i] has invalid field: %s", filter_id, filter_field)
+            logger.info("slice [%i] has invalid field: %s", filter_id, filter_field)
 
     for filter_box in filter_boxes:
         filter_fields: dict[str, dict[str, Any]] = {}

@@ -52,11 +52,13 @@ from superset.utils.feature_flag_manager import FeatureFlagManager
 from superset.utils.machine_auth import MachineAuthProviderFactory
 from superset.utils.profiler import SupersetProfiler
 
+logger = logging.getLogger(__name__)
+
 # Apply MariaDB DDL fix early in the import chain
 try:
     apply_mariadb_ddl_fix()
 except Exception as ex:
-    logging.exception(
+    logger.exception(
         "Applying MariaDB DDL fix failed; continuing without patch: %s", ex
     )
 

@@ -408,6 +408,7 @@ select = [
     "E4",
     "E7",
     "E9",
+    "LOG015",
     "PT009",
     "TRY201",
     "B",
@@ -454,6 +455,8 @@ dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 "superset/key_value/types.py" = ["TID251"]
 "superset/translations/utils.py" = ["TID251"]
 "superset/extensions/__init__.py" = ["TID251"]
+"superset/migrations/versions/*" = ["LOG015"]  # one-shot Alembic scripts run outside the app's logging config
+"tests/integration_tests/logging_configurator_tests.py" = ["LOG015"]  # asserts on root logger configuration
 "superset/utils/json.py" = ["TID251"]
 "docker/*" = ["I"]  # Docker config files have non-standard imports that vary by environment
 "superset/db_engine_specs/lib.py" = ["E501"]  # Database config file with long description strings
