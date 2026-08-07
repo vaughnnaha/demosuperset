@@ -141,6 +141,8 @@ def test_summarize_counts_decisions_and_outcomes(tmp_path: Path) -> None:
     assert metrics["issues_touched"] == [3]
     assert DENIED["reason"] in metrics["denial_reasons"]
     assert metrics["actors"]["vaughnnaha"] == 1
+    assert metrics["window_start"] == "2026-08-07T19:49:08+00:00"
+    assert metrics["window_end"] == "2026-08-07T20:24:00+00:00"
 
 
 def test_markdown_reports_both_paths(tmp_path: Path) -> None:
@@ -184,7 +186,14 @@ def test_search_attributes_a_pull_request_when_polling_was_off(tmp_path: Path) -
             status_code=200,
             json=lambda: {
                 "items": [
-                    {"html_url": "https://github.com/vaughnnaha/demosuperset/pull/7"}
+                    {
+                        "html_url": "https://github.com/vaughnnaha/demosuperset/pull/1",
+                        "created_at": "2026-08-06T00:00:00Z",
+                    },
+                    {
+                        "html_url": "https://github.com/vaughnnaha/demosuperset/pull/7",
+                        "created_at": "2026-08-07T20:20:00Z",
+                    },
                 ]
             },
         )

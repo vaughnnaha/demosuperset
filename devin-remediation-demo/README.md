@@ -214,8 +214,9 @@ Metrics: authorized vs. denied counts, denial rate, denials by reason, actors,
 sessions started, sessions that failed to start, sessions reaching a terminal
 status, pull requests opened and merged, pull-request yield, merge rate, and mean
 session duration. Pull-request state is resolved through the GitHub API; when
-polling was disabled the report searches for a pull request referencing the issue
-and marks the attribution `inferred`. Pass `--no-enrich` to stay offline.
+polling was disabled the report falls back to the earliest pull request that
+references the issue and was opened after the session started, and marks the
+attribution `inferred`. Pass `--no-enrich` to stay offline.
 
 ## Tests
 
