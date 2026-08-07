@@ -55,6 +55,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           POLL_TIMEOUT_SECONDS: ${{ vars.POLL_TIMEOUT_SECONDS }}
           ACTOR_ALLOWLIST: ${{ vars.ACTOR_ALLOWLIST }}
+          EXTRA_PROMPT_DIRECTIVES: ${{ vars.EXTRA_PROMPT_DIRECTIVES }}
         run: |
           mkdir -p audit && touch audit/remediation-audit.jsonl
           # The container runs unprivileged, so the bind-mounted ledger must be
@@ -71,6 +72,7 @@ jobs:
             -e GITHUB_RUN_ID \
             -e POLL_TIMEOUT_SECONDS \
             -e ACTOR_ALLOWLIST \
+            -e EXTRA_PROMPT_DIRECTIVES \
             -e AUDIT_LOG_PATH=/audit/remediation-audit.jsonl \
             -v "${{ github.event_path }}:/event.json:ro" \
             -v "$PWD/audit:/audit" \
@@ -78,6 +80,7 @@ jobs:
         # Optional repo variables:
         #   POLL_TIMEOUT_SECONDS - poll the session this long for a PR link
         #   ACTOR_ALLOWLIST      - comma-separated logins permitted to trigger
+        #   EXTRA_PROMPT_DIRECTIVES - extra bullet directives for every prompt
 
       - name: Verify audit ledger is not empty
         if: always()
