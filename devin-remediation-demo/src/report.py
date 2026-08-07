@@ -54,6 +54,8 @@ class Request:
     """
 
     run_id: str
+    decided_at: str | None = None
+    last_event_at: str | None = None
     issue_number: int | None = None
     repository: str | None = None
     actor: str | None = None
@@ -76,10 +78,11 @@ class Request:
 
 
 def parse_timestamp(value: str | None) -> datetime | None:
+    """Parse an ISO-8601 timestamp, accepting the `Z` suffix the GitHub API uses."""
     if not value:
         return None
     try:
-        return datetime.fromisoformat(value)
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return None
 
@@ -111,13 +114,21 @@ def fold_requests(records: Sequence[dict[str, Any]]) -> list[Request]:
     fields they share. Records with no run id fall back to the issue number so
     locally generated ledgers still group.
     """
-    fields = set(Request.__dataclass_fields__) - {"run_id", "events"}
+    fields = set(Request.__dataclass_fields__) - {
+        "run_id",
+        "events",
+        "decided_at",
+        "last_event_at",
+    }
     folded: dict[str, dict[str, Any]] = {}
     events: dict[str, list[str]] = {}
     for record in records:
         key = str(record.get("run_id") or f"issue-{record.get('issue_number')}")
         state = folded.setdefault(key, {})
         events.setdefault(key, []).append(str(record["event"]))
+        if timestamp := record.get("timestamp"):
+            state.setdefault("decided_at", str(timestamp))
+            state["last_event_at"] = str(timestamp)
         state.update(
             {
                 name: value
@@ -137,7 +148,9 @@ def find_linked_pull_requests(requests_: Sequence[Request], token: str | None) -
     """Attribute a pull request to a session the ledger has no PR link for.
 
     The ledger only records `pull_request` when polling is enabled, so fall back
-    to searching for a pull request that references the issue.
+    to the earliest pull request that references the issue and was opened after
+    the session started. Without that lower bound a later pull request merely
+    mentioning the issue would be misattributed to the session.
     """
     if not token:
         return
@@ -152,7 +165,12 @@ def find_linked_pull_requests(requests_: Sequence[Request], token: str | None) -
                     "Authorization": f"Bearer {token}",
                     "Accept": "application/vnd.github+json",
                 },
-                params={"q": query, "per_page": "1", "sort": "created"},
+                params={
+                    "q": query,
+                    "per_page": "20",
+                    "sort": "created",
+                    "order": "asc",
+                },
                 timeout=REQUEST_TIMEOUT,
             )
             if response.status_code >= 400:
@@ -160,9 +178,14 @@ def find_linked_pull_requests(requests_: Sequence[Request], token: str | None) -
             items = response.json().get("items") or []
         except (requests.RequestException, ValueError):
             continue
-        if items:
-            request.pull_request = items[0].get("html_url")
+        started = parse_timestamp(request.session_started_at)
+        for item in items:
+            created = parse_timestamp(item.get("created_at"))
+            if started and (created is None or created < started):
+                continue
+            request.pull_request = item.get("html_url")
             request.pull_request_source = "search"
+            break
 
 
 def enrich_pull_requests(requests_: Sequence[Request], token: str | None) -> None:
@@ -206,9 +229,14 @@ def summarize(requests_: Sequence[Request]) -> dict[str, Any]:
         for r in sessions
         if isinstance(r.session_duration_seconds, int)
     ]
-    timestamps = [
+    starts = [
         ts
-        for ts in (parse_timestamp(r.session_started_at) for r in requests_)
+        for ts in (parse_timestamp(r.decided_at) for r in requests_)
+        if ts is not None
+    ]
+    ends = [
+        ts
+        for ts in (parse_timestamp(r.last_event_at) for r in requests_)
         if ts is not None
     ]
     return {
@@ -237,8 +265,8 @@ def summarize(requests_: Sequence[Request]) -> dict[str, Any]:
         "issues_touched": sorted(
             {r.issue_number for r in requests_ if r.issue_number is not None}
         ),
-        "window_start": min(timestamps).isoformat() if timestamps else None,
-        "window_end": max(timestamps).isoformat() if timestamps else None,
+        "window_start": min(starts).isoformat() if starts else None,
+        "window_end": max(ends).isoformat() if ends else None,
     }
 
 
@@ -291,7 +319,7 @@ def render_markdown(requests_: Sequence[Request], metrics: dict[str, Any]) -> st
         "| issue | actor | permission | decision | session | outcome |",
         "| --- | --- | --- | --- | --- | --- |",
     ]
-    for request in sorted(requests_, key=lambda r: str(r.session_started_at or "")):
+    for request in sorted(requests_, key=lambda r: str(r.decided_at or "")):
         lines.append(
             f"| {_issue(request)} | {request.actor or '?'}"
             f"{' (bot)' if request.actor_type == 'Bot' else ''} "
