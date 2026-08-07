@@ -24,16 +24,27 @@ permissions:
   issues: write
   contents: read
 
+# One in-flight remediation per issue.
+concurrency:
+  group: devin-remediation-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
 jobs:
   remediate:
-    if: github.event.label.name == 'devin-remediation'
+    # `devin-approved` authorizes execution; `devin-remediation` is only
+    # classification metadata and is re-checked inside the automation.
+    if: github.event.label.name == 'devin-approved'
     runs-on: ubuntu-latest
+    # Requires an approval from a reviewer configured on the environment
+    # before any job step runs.
+    environment: devin-remediation
     steps:
       - name: Check out automation code
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           sparse-checkout: devin-remediation-demo
           sparse-checkout-cone-mode: false
+          persist-credentials: false
 
       - name: Build automation image
         run: docker build -t devin-remediation-demo devin-remediation-demo
@@ -43,8 +54,12 @@ jobs:
           DEVIN_API_KEY: ${{ secrets.DEVIN_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           POLL_TIMEOUT_SECONDS: ${{ vars.POLL_TIMEOUT_SECONDS }}
+          ACTOR_ALLOWLIST: ${{ vars.ACTOR_ALLOWLIST }}
         run: |
+          mkdir -p audit && touch audit/remediation-audit.jsonl
           docker run --rm \
+            --read-only --tmpfs /tmp --user 65534:65534 \
+            --cap-drop ALL --security-opt no-new-privileges \
             -e DEVIN_API_KEY \
             -e GITHUB_TOKEN \
             -e GITHUB_EVENT_PATH=/event.json \
@@ -52,7 +67,20 @@ jobs:
             -e GITHUB_REPOSITORY \
             -e GITHUB_RUN_ID \
             -e POLL_TIMEOUT_SECONDS \
+            -e ACTOR_ALLOWLIST \
+            -e AUDIT_LOG_PATH=/audit/remediation-audit.jsonl \
             -v "${{ github.event_path }}:/event.json:ro" \
+            -v "$PWD/audit:/audit" \
             devin-remediation-demo
-        # Optional repo variable POLL_TIMEOUT_SECONDS: seconds to poll the session
-        # for a pull-request link before the job exits.
+        # Optional repo variables:
+        #   POLL_TIMEOUT_SECONDS - poll the session this long for a PR link
+        #   ACTOR_ALLOWLIST      - comma-separated logins permitted to trigger
+
+      - name: Retain audit record
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: remediation-audit-${{ github.event.issue.number }}-${{ github.run_id }}
+          path: audit/remediation-audit.jsonl
+          retention-days: 400
+          if-no-files-found: warn
