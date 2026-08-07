@@ -64,6 +64,24 @@ jobs:
       - name: Build image
         run: docker build -t devin-remediation-demo .
 
+      - name: Report renders from a ledger without network access
+        run: |
+          printf '%s\n' \
+            '{"timestamp":"2026-01-01T00:00:00+00:00","event":"authorization.denied","decision":"deny","reason":"not allowlisted","run_id":"1","issue_number":1}' \
+            > /tmp/ledger.jsonl
+          python src/report.py /tmp/ledger.jsonl --no-enrich --json /tmp/report.json
+          python -c "import json;assert json.load(open('/tmp/report.json'))['metrics']['denied']==1"
+
+      - name: Audit ledger stays writable for the unprivileged container
+        run: |
+          mkdir -p /tmp/audit && touch /tmp/audit/remediation-audit.jsonl
+          sudo chown -R 65534:65534 /tmp/audit
+          docker run --rm --read-only --user 65534:65534 \
+            --cap-drop ALL --security-opt no-new-privileges \
+            -v /tmp/audit:/audit --entrypoint sh devin-remediation-demo \
+            -c 'echo probe >> /audit/remediation-audit.jsonl'
+          test -s /tmp/audit/remediation-audit.jsonl
+
       - name: Reject a wrong-label event without calling any API
         env:
           DEVIN_API_KEY: not-a-real-key

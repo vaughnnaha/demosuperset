@@ -1,0 +1,98 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+name: Devin Remediation Report
+
+on:
+  schedule:
+    # Mondays at 13:00 UTC.
+    - cron: "0 13 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: devin-remediation-report
+  cancel-in-progress: true
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out automation code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: devin-remediation-demo
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        working-directory: devin-remediation-demo
+        run: pip install --require-hashes -r requirements.txt
+
+      - name: Collect retained audit ledgers
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p audit
+          gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" \
+            --jq '.artifacts[] | select(.expired == false)
+                  | select(.name | startswith("remediation-audit-"))
+                  | "\(.id) \(.name)"' > artifacts.txt
+          while read -r id name; do
+            gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}/zip" \
+              > "${id}.zip" || continue
+            python -c "import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" \
+              "${id}.zip" "audit/${id}" || true
+            echo "collected ${name}"
+          done < artifacts.txt
+          # Empty ledgers carry no records and would only widen the gap count.
+          find audit -name '*.jsonl' -empty -delete
+          find audit -name '*.jsonl' -print > ledgers.txt
+          echo "ledgers collected: $(wc -l < ledgers.txt)"
+
+      - name: Generate effectiveness report
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ ! -s ledgers.txt ]; then
+            echo "::error::no retained audit ledgers found; nothing to report on"
+            exit 1
+          fi
+          xargs -a ledgers.txt python devin-remediation-demo/src/report.py \
+            --markdown remediation-report.md \
+            --json remediation-report.json
+          cat remediation-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Retain report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: remediation-report-${{ github.run_id }}
+          path: |
+            remediation-report.md
+            remediation-report.json
+          retention-days: 90
+          if-no-files-found: warn

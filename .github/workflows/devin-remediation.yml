@@ -57,6 +57,9 @@ jobs:
           ACTOR_ALLOWLIST: ${{ vars.ACTOR_ALLOWLIST }}
         run: |
           mkdir -p audit && touch audit/remediation-audit.jsonl
+          # The container runs unprivileged, so the bind-mounted ledger must be
+          # writable by that uid or every audit append is silently dropped.
+          sudo chown -R 65534:65534 audit
           docker run --rm \
             --read-only --tmpfs /tmp --user 65534:65534 \
             --cap-drop ALL --security-opt no-new-privileges \
@@ -76,11 +79,23 @@ jobs:
         #   POLL_TIMEOUT_SECONDS - poll the session this long for a PR link
         #   ACTOR_ALLOWLIST      - comma-separated logins permitted to trigger
 
+      - name: Verify audit ledger is not empty
+        if: always()
+        run: |
+          if [ ! -s audit/remediation-audit.jsonl ]; then
+            echo "::error::audit ledger is empty; audit records were not persisted"
+            exit 1
+          fi
+          wc -l audit/remediation-audit.jsonl
+
       - name: Retain audit record
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: remediation-audit-${{ github.event.issue.number }}-${{ github.run_id }}
           path: audit/remediation-audit.jsonl
-          retention-days: 400
+          # Capped by the repository Actions retention limit, which is 90 days
+          # for public repositories. Longer AU-11 retention needs either a raised
+          # repository limit or an external append-only store.
+          retention-days: 90
           if-no-files-found: warn
