@@ -24,7 +24,11 @@ on:
 
 permissions:
   contents: read
+  # Reading run artifacts, and resolving the state of the pull requests the
+  # ledger points at. All read-only.
   actions: read
+  issues: read
+  pull-requests: read
 
 concurrency:
   group: devin-remediation-report
@@ -69,19 +73,20 @@ jobs:
           done < artifacts.txt
           # Empty ledgers carry no records and would only widen the gap count.
           find audit -name '*.jsonl' -empty -delete
-          find audit -name '*.jsonl' -print > ledgers.txt
-          echo "ledgers collected: $(wc -l < ledgers.txt)"
+          echo "ledgers collected: $(find audit -name '*.jsonl' | wc -l)"
 
       - name: Generate effectiveness report
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          if [ ! -s ledgers.txt ]; then
+          if [ -z "$(find audit -name '*.jsonl' -print -quit)" ]; then
             echo "::error::no retained audit ledgers found; nothing to report on"
             exit 1
           fi
-          xargs -a ledgers.txt python devin-remediation-demo/src/report.py \
+          # Pass the directory, not a glob: the ledger count grows with the
+          # retention window and would eventually exceed the argument list.
+          python devin-remediation-demo/src/report.py audit \
             --markdown remediation-report.md \
             --json remediation-report.json
           cat remediation-report.md >> "$GITHUB_STEP_SUMMARY"

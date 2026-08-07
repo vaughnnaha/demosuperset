@@ -22,7 +22,9 @@ each pull request through the GitHub API, and renders a Markdown report plus a
 machine-readable JSON summary.
 
 Usage:
-    python src/report.py audit/*.jsonl --markdown report.md --json report.json
+    python src/report.py audit/ --markdown report.md --json report.json
+
+Paths may be JSON Lines files or directories, which are searched recursively.
 """
 
 from __future__ import annotations
@@ -87,10 +89,30 @@ def parse_timestamp(value: str | None) -> datetime | None:
         return None
 
 
+def expand_paths(paths: Iterable[str]) -> list[str]:
+    """Resolve each argument to ledger files, walking directories recursively.
+
+    Taking a directory keeps the caller off the shell's argument list, which a
+    long retention window would otherwise overflow and silently split.
+    """
+    resolved: list[str] = []
+    for path in paths:
+        if os.path.isdir(path):
+            for root, _, names in os.walk(path):
+                resolved += [
+                    os.path.join(root, name)
+                    for name in sorted(names)
+                    if name.endswith(".jsonl")
+                ]
+        elif os.path.isfile(path):
+            resolved.append(path)
+    return resolved
+
+
 def load_records(paths: Iterable[str]) -> list[dict[str, Any]]:
     """Read audit records from JSON Lines files, skipping unparsable lines."""
     records: list[dict[str, Any]] = []
-    for path in paths:
+    for path in expand_paths(paths):
         if not os.path.isfile(path):
             continue
         with open(path, encoding="utf-8") as handle:
@@ -376,7 +398,9 @@ def _outcome(request: Request) -> str:
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("paths", nargs="+", help="audit JSON Lines files")
+    parser.add_argument(
+        "paths", nargs="+", help="audit JSON Lines files or directories of them"
+    )
     parser.add_argument("--markdown", help="write the Markdown report here")
     parser.add_argument("--json", dest="json_path", help="write the JSON summary here")
     parser.add_argument(

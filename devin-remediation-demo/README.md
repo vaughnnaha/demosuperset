@@ -210,7 +210,7 @@ into one row per authorization decision, and writes the report to the job summar
 plus a `remediation-report-<run>` artifact (Markdown and JSON).
 
 ```bash
-python src/report.py audit/*.jsonl --markdown report.md --json report.json
+python src/report.py audit --markdown report.md --json report.json
 ```
 
 Metrics: authorized vs. denied counts, denial rate, denials by reason, actors,

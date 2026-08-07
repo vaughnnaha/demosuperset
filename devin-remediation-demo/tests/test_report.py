@@ -83,6 +83,7 @@ ENDED = {
 
 
 def write_ledger(tmp_path: Path, records: list[dict[str, Any]]) -> str:
+    tmp_path.mkdir(parents=True, exist_ok=True)
     path = tmp_path / "remediation-audit.jsonl"
     with open(path, "w", encoding="utf-8") as handle:
         for record in records:
@@ -207,6 +208,17 @@ def test_search_attributes_a_pull_request_when_polling_was_off(tmp_path: Path) -
     )
     assert requests_[0].pull_request_source == "search"
     assert "inferred" in report._outcome(requests_[0])
+
+
+def test_a_directory_of_ledgers_is_read_recursively(tmp_path: Path) -> None:
+    for run, records in (("a", [DENIED]), ("b", [GRANTED, STARTED])):
+        write_ledger(tmp_path / run, [*records])
+    (tmp_path / "c").mkdir()
+    (tmp_path / "c" / "notes.txt").write_text("ignored", encoding="utf-8")
+
+    records = report.load_records([str(tmp_path)])
+    assert len(records) == 3
+    assert len(report.fold_requests(records)) == 2
 
 
 def test_search_skips_denied_requests(tmp_path: Path) -> None:
