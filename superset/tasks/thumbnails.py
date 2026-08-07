@@ -87,7 +87,7 @@ def cache_dashboard_thumbnail(
     from superset.models.dashboard import Dashboard
 
     if not thumbnail_cache:
-        logging.warning("No cache set, refusing to compute")
+        logger.warning("No cache set, refusing to compute")
         return
 
     dashboard = Dashboard.get(dashboard_id)
@@ -129,7 +129,7 @@ def cache_dashboard_screenshot(  # pylint: disable=too-many-arguments
     from superset.models.dashboard import Dashboard
 
     if not thumbnail_cache:
-        logging.warning("No cache set, refusing to compute")
+        logger.warning("No cache set, refusing to compute")
         return
 
     dashboard = Dashboard.get(dashboard_id)

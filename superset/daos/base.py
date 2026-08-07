@@ -607,7 +607,7 @@ class BaseDAO(CoreBaseDAO[T], Generic[T]):
             col, opr, value = c.col, c.opr, c.value
             if not col or not hasattr(cls.model_cls, col):
                 model_name = cls.model_cls.__name__ if cls.model_cls else "Unknown"
-                logging.error(
+                logger.error(
                     "Invalid filter: column '%s' does not exist on %s", col, model_name
                 )
                 raise ValueError(
@@ -637,7 +637,7 @@ class BaseDAO(CoreBaseDAO[T], Generic[T]):
                 else:
                     query = query.filter(operator_enum.apply(column, value))
             except Exception as e:
-                logging.error("Error applying filter on column '%s': %s", col, e)
+                logger.error("Error applying filter on column '%s': %s", col, e)
                 raise
         return query
 
