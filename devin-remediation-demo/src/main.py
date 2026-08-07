@@ -85,7 +85,9 @@ def audit(event: str, **fields: Any) -> None:
             with open(path, "a", encoding="utf-8") as handle:
                 handle.write(line + "\n")
         except OSError as exc:
-            logger.warning("Could not append to audit log %s: %s", path, exc)
+            # An unwritable ledger is a control failure, not a nuisance: surface
+            # it loudly so the run does not appear fully audited.
+            logger.error("Could not append to audit log %s: %s", path, exc)
 
 
 def redact(text: str) -> str:

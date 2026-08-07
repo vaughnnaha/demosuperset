@@ -55,13 +55,15 @@ this automation.
 | 7 | Least-privilege runtime | Container runs `--read-only`, `--user 65534:65534`, `--cap-drop ALL`, `--security-opt no-new-privileges`; image declares `USER 65534` | AC-6, CM-7, SC-2 |
 | 8 | Audit event content | Each record carries UTC timestamp, event type, actor login **and numeric id** (logins are renameable), actor type, resolved permission, decision, reason, repository, issue number, run id and URL | AU-2, AU-3, AU-8 |
 | 9 | Agent session lifecycle accounting | `session.started` records `session_started_at`; with polling enabled `session.ended` records `session_ended_at`, `session_duration_seconds`, terminal status, and pull-request URL — the NPE equivalent of logon/logoff records | AU-3, AU-12, AC-12 |
-| 10 | Audit retention | Audit JSONL uploaded as a workflow artifact with `retention-days: 400`, uploaded `if: always()` so denials and failures are retained too | AU-9, AU-11 |
+| 10 | Audit retention | Audit JSONL uploaded as a workflow artifact `if: always()`, so denials and failures are retained too. Retention is set to the 90-day public-repository ceiling; raising the repository Actions retention limit extends it | AU-9, AU-11 |
+| 10a | Audit failure is not silent | A ledger append failure logs at `ERROR`, and the workflow fails the run if the ledger is empty, so a run cannot appear audited when it is not | AU-5 |
 | 11 | Untrusted input isolation | Issue body is delimited and explicitly declared data-not-instructions in the prompt, and truncated at 20,000 characters | SI-10 |
 | 12 | Secret redaction before egress | Token-shaped strings (GitHub PAT/OAuth, Devin, AWS, OpenAI, PEM private keys) are stripped from the title, body, and any logged API response before transmission or logging | SI-10, SC-8, MP-6 |
 | 13 | Supply-chain pinning | Actions pinned to full commit SHAs; base image pinned by `sha256:` digest; dependencies installed with `--require-hashes` from a compiled lockfile | CM-2, SR-11, SI-7 |
 | 14 | Concurrency limit | `concurrency` group per issue prevents duplicate in-flight sessions; the Devin API call is `idempotent` | SC-5 |
 | 15 | Automation self-test in CI | `devin-remediation-automation.yml` runs the unit suite, `ruff`, and `pip-audit` on any change to the automation | CA-2, RA-5, SA-11 |
 | 16 | Transport security | All API traffic is HTTPS with explicit 30-second timeouts | SC-8, SC-5 |
+| 17 | Periodic audit review | `devin-remediation-report.yml` runs weekly and on demand: `report.py` folds the retained ledgers into authorization outcomes (allow/deny counts, denial rate, denials by reason, actors) and remediation outcomes (sessions, terminal statuses, pull requests opened/merged, yield, mean duration), published to the job summary and retained as an artifact | AU-6, CA-7, PM-6 |
 
 ## Recommended next (not implemented)
 
@@ -75,7 +77,7 @@ this automation.
 | SBOM (CycloneDX) and build provenance attestation for the automation image | Supply-chain evidence beyond pinning | SR-4, SA-15 |
 | Signed commits required on protected branches | Integrity of what the agent lands | SI-7 |
 | Daily session cap | Cost and abuse ceiling beyond per-issue concurrency | SC-5 |
-| Periodic audit review producing an effectiveness report | Closes the loop from logging to monitoring | AU-6, CA-7 |
+| Alerting on denial spikes or repeated unauthorized attempts | The report is periodic, not real-time | AU-6(1), IR-5, SI-4 |
 
 ## Residual risk
 
@@ -87,3 +89,7 @@ this automation.
   reduces accidental exposure; it is not a data-loss-prevention system.
 - Artifact retention is enforced by GitHub and deletable by a repository admin.
   Meeting a strict AU-9 requirement needs an external, append-only store.
+- The report is bounded by artifact retention: expired artifacts leave gaps, and
+  it counts only what the ledger recorded. With polling disabled it cannot
+  observe session duration or terminal status, and attributes pull requests by
+  issue reference instead of from the session; those rows are marked `inferred`.

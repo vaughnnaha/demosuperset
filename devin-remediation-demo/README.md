@@ -39,7 +39,9 @@ NIST SP 800-53 Rev. 5 mapping.
 5. The script comments the session link and workflow-run link on the issue.
 6. Devin works the issue autonomously and opens a pull request.
 7. Every authorization decision and session lifecycle transition is appended to
-   a JSONL audit log, retained as a workflow artifact for 400 days.
+   a JSONL audit log, retained as a workflow artifact.
+8. A scheduled report job folds those retained ledgers into an effectiveness
+   report: authorization outcomes, session outcomes, and pull-request results.
 
 ## Architecture
 
@@ -54,7 +56,9 @@ Devin API  (POST /v1/sessions)
     ↓
 Devin Session
     ↓
-Pull Request                     audit JSONL → workflow artifact (400 days)
+Pull Request                     audit JSONL → workflow artifact
+                                     ↓ weekly
+                                 src/report.py → effectiveness report
 ```
 
 ## Two-label model
@@ -81,7 +85,7 @@ Optional repository variables:
 | Variable | Default | Effect |
 | --- | --- | --- |
 | `ACTOR_ALLOWLIST` | unset | Comma-separated logins permitted to trigger remediation. Unset means "any collaborator with write or admin". |
-| `POLL_TIMEOUT_SECONDS` | `0` | When greater than zero, poll the session for that many seconds, comment the pull-request URL, and record session end time and duration in the audit log. |
+| `POLL_TIMEOUT_SECONDS` | `0` | When greater than zero, poll the session for that many seconds, comment the pull-request URL, and record session end time and duration in the audit log. Set it (e.g. `1800`) for session-duration and outcome metrics in the report. |
 
 ## Required repository settings
 
@@ -91,6 +95,9 @@ Optional repository variables:
 2. **Labels** `devin-remediation` and `devin-approved`.
 3. **Dependency graph** enabled (Settings → Code security) so `dependency-review`
    and Dependabot can run.
+4. Optional: raise the **artifact retention limit** (Settings → Actions →
+   General). Public repositories cap it at 90 days, which caps how far back the
+   effectiveness report can see.
 
 ## Build the Docker image
 
@@ -106,6 +113,10 @@ The base image is pinned by digest and dependencies install with
 ```bash
 cp .env.example .env   # fill in DEVIN_API_KEY and GITHUB_TOKEN
 set -a && source .env && set +a
+
+# The container runs as uid 65534, so the mounted ledger must be writable by it
+# or audit appends are dropped.
+mkdir -p audit && sudo chown -R 65534:65534 audit
 
 docker run --rm \
   --read-only --tmpfs /tmp --user 65534:65534 \
@@ -188,6 +199,24 @@ Event types: `authorization.granted`, `authorization.denied`,
 `session_ended_at`, `session_duration_seconds`, `session_status`, and
 `pull_request`.
 
+## Effectiveness report
+
+`.github/workflows/devin-remediation-report.yml` runs weekly and on demand. It
+downloads every unexpired `remediation-audit-*` artifact, folds the event stream
+into one row per authorization decision, and writes the report to the job summary
+plus a `remediation-report-<run>` artifact (Markdown and JSON).
+
+```bash
+python src/report.py audit/*.jsonl --markdown report.md --json report.json
+```
+
+Metrics: authorized vs. denied counts, denial rate, denials by reason, actors,
+sessions started, sessions that failed to start, sessions reaching a terminal
+status, pull requests opened and merged, pull-request yield, merge rate, and mean
+session duration. Pull-request state is resolved through the GitHub API; when
+polling was disabled the report searches for a pull request referencing the issue
+and marks the attribution `inferred`. Pass `--no-enrich` to stay offline.
+
 ## Tests
 
 ```bash
@@ -201,3 +230,8 @@ allowlist, and a missing classification label are each refused without creating
 a session; an authorized run writes the expected audit records; the issue body
 is fenced as untrusted data with secrets redacted; and missing key / missing
 payload / Devin API failure all exit nonzero.
+
+`tests/test_report.py` covers the report: folding the event stream into one row
+per run, later records superseding earlier ones, the computed metrics, both paths
+appearing in the Markdown, pull-request state resolution and search fallback, and
+nonzero exit on an empty ledger.
