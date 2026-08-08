@@ -218,6 +218,37 @@ test('checkIsMissingRequiredValue returns falsy for filter without controlValues
   expect(checkIsMissingRequiredValue(filter, filterState)).toBeFalsy();
 });
 
+test('checkIsMissingRequiredValue treats a valueless defaultToFirstItem filter as missing', () => {
+  const filter = createFilter('test-filter', {
+    controlValues: { defaultToFirstItem: true },
+  });
+
+  expect(checkIsMissingRequiredValue(filter, { value: undefined })).toBe(true);
+  expect(checkIsMissingRequiredValue(filter, { value: null })).toBe(true);
+  expect(checkIsMissingRequiredValue(filter)).toBe(true);
+});
+
+test('checkIsMissingRequiredValue reports defaultToFirstItem filter as missing only once cleared', () => {
+  const filter = createFilter('test-filter', {
+    controlValues: { defaultToFirstItem: true },
+  });
+  const selected: FilterState = { value: ['boy'] };
+  const cleared: FilterState = { value: null };
+
+  expect(checkIsMissingRequiredValue(filter, selected)).toBe(false);
+  expect(checkIsMissingRequiredValue(filter, cleared)).toBe(true);
+});
+
+test('checkIsMissingRequiredValue treats defaultToFirstItem as required even when enableEmptyFilter is false', () => {
+  const filter = createFilter('test-filter', {
+    enableEmptyFilter: false,
+    controlValues: { defaultToFirstItem: true },
+  });
+
+  expect(checkIsMissingRequiredValue(filter, { value: null })).toBe(true);
+  expect(checkIsMissingRequiredValue(filter, { value: ['boy'] })).toBe(false);
+});
+
 // checkIsApplyDisabled tests
 test('checkIsApplyDisabled returns true when filters have validation errors', () => {
   const dataMaskSelected: DataMaskStateWithId = {

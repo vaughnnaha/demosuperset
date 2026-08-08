@@ -39,6 +39,7 @@ import {
   PluginFilterSelectChartProps,
   PluginFilterSelectProps,
   PluginFilterSelectQueryFormData,
+  SelectValue,
 } from './types';
 
 jest.useFakeTimers({ advanceTimers: true });
@@ -1906,4 +1907,144 @@ test('renders dashboard select dropdown popup under document body', async () => 
   });
 
   expect(dropdown?.parentElement).toBe(document.body);
+});
+
+const defaultToFirstItemFormData = {
+  defaultToFirstItem: true,
+  multiSelect: false,
+  enableEmptyFilter: false,
+  defaultValue: null,
+  // Non-empty extraFormData indicates a parent filter dependency, which is
+  // what makes the default-value effects re-evaluate on every update
+  extraFormData: {
+    filters: [{ col: 'region', op: 'IN', val: ['North America'] }],
+  },
+};
+
+const buildDefaultToFirstItemReduxState = (value: SelectValue) => ({
+  useRedux: true,
+  initialState: {
+    nativeFilters: {
+      filters: { 'test-filter': { name: 'Test Filter' } },
+    },
+    dataMask: {
+      'test-filter': {
+        extraFormData: {},
+        filterState: { value },
+      },
+    },
+  },
+});
+
+test('keeps a defaultToFirstItem filter cleared after the user clears it', async () => {
+  jest.useFakeTimers({ advanceTimers: true });
+  const setDataMaskMock = jest.fn();
+  const { rerender } = render(
+    <SelectFilterPlugin
+      {...buildSelectFilterProps({
+        formData: defaultToFirstItemFormData,
+        filterState: { value: ['boy'] },
+        setDataMask: setDataMaskMock,
+      })}
+    />,
+    buildDefaultToFirstItemReduxState(['boy']),
+  );
+
+  expect(screen.getByTitle('boy')).toBeInTheDocument();
+
+  userEvent.click(
+    screen.getByRole('img', { name: /close-circle/i, hidden: true }),
+  );
+
+  await waitFor(() => {
+    expect(setDataMaskMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filterState: expect.objectContaining({ value: null }),
+      }),
+    );
+  });
+
+  setDataMaskMock.mockClear();
+
+  // The filter bar propagates the cleared value back to the plugin
+  rerender(
+    <SelectFilterPlugin
+      {...buildSelectFilterProps({
+        formData: defaultToFirstItemFormData,
+        filterState: { value: null },
+        setDataMask: setDataMaskMock,
+      })}
+    />,
+  );
+
+  act(() => {
+    jest.advanceTimersByTime(500);
+  });
+
+  expect(setDataMaskMock).not.toHaveBeenCalledWith(
+    expect.objectContaining({
+      filterState: expect.objectContaining({ value: ['boy'] }),
+    }),
+  );
+  expect(screen.queryByTitle('boy')).not.toBeInTheDocument();
+});
+
+test('re-applies defaultToFirstItem auto-select after a clear all cycle', async () => {
+  jest.useFakeTimers({ advanceTimers: true });
+  const setDataMaskMock = jest.fn();
+  const renderProps = (
+    filterState: { value: SelectValue },
+    clearAllTrigger?: Record<string, boolean>,
+  ) => (
+    <SelectFilterPlugin
+      {...buildSelectFilterProps({
+        formData: defaultToFirstItemFormData,
+        filterState,
+        setDataMask: setDataMaskMock,
+      })}
+      clearAllTrigger={clearAllTrigger}
+    />
+  );
+
+  const { rerender } = render(
+    renderProps({ value: ['boy'] }),
+    buildDefaultToFirstItemReduxState(['boy']),
+  );
+
+  userEvent.click(
+    screen.getByRole('img', { name: /close-circle/i, hidden: true }),
+  );
+
+  await waitFor(() => {
+    expect(setDataMaskMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filterState: expect.objectContaining({ value: null }),
+      }),
+    );
+  });
+
+  setDataMaskMock.mockClear();
+  rerender(renderProps({ value: null }));
+
+  act(() => {
+    jest.advanceTimersByTime(500);
+  });
+  expect(setDataMaskMock).not.toHaveBeenCalledWith(
+    expect.objectContaining({
+      filterState: expect.objectContaining({ value: ['boy'] }),
+    }),
+  );
+
+  // A global "Clear all" re-enables the auto-select for this filter
+  rerender(renderProps({ value: null }, { 'test-filter': true }));
+  setDataMaskMock.mockClear();
+  rerender(renderProps({ value: undefined }));
+
+  await waitFor(() => {
+    expect(setDataMaskMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filterState: expect.objectContaining({ value: ['boy'] }),
+      }),
+    );
+  });
 });
