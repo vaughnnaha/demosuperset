@@ -26,6 +26,11 @@ from superset_core.tasks.models import TaskSubscriber as CoreTaskSubscriber
 from superset.models.helpers import AuditMixinNullable
 
 
+def utcnow_naive() -> datetime:
+    """Return the current UTC time as a naive datetime for naive DateTime columns."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 class TaskSubscriber(CoreTaskSubscriber, AuditMixinNullable, Model):
     """
     Model for tracking task subscriptions in shared tasks.
@@ -48,7 +53,7 @@ class TaskSubscriber(CoreTaskSubscriber, AuditMixinNullable, Model):
     user_id = Column(
         Integer, ForeignKey("ab_user.id", ondelete="CASCADE"), nullable=False
     )
-    subscribed_at = Column(DateTime, nullable=False, default=datetime.now(timezone.utc))
+    subscribed_at = Column(DateTime, nullable=False, default=utcnow_naive)
 
     # Relationships
     task = relationship("Task", back_populates="subscribers")
